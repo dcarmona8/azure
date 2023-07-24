@@ -1,0 +1,6 @@
+zone: 'Europe/Madrid'
+rpms:
+- httpd
+- podman
+- httpd-tools
+- openssl
