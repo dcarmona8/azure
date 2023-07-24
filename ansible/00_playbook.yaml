@@ -1,0 +1,69 @@
+- name: 'First playbook'
+  hosts: webservers
+  remote_user: azureuser
+  become: true
+  vars_files:
+    - vars/00_vars.yaml
+  tasks:
+    - name: 'Establecer TimeZone'
+      timezone:
+        name: "{{ zone }}"
+
+    - name: 'Instalar paquetes'
+      ansible.builtin.yum:
+        name: "{{ rpms }}"
+        state: present
+
+    - name: 'Crear directorio webserver'
+      file:
+        path: "/home/azureuser/webserver"
+        state: directory
+
+    - name: 'Instalar modulo python3-passlib'
+      become: yes
+      ansible.builtin.shell:
+        cmd: pip3 install passlib
+
+    - name: 'Crear usuario test con htpasswd'
+      community.general.htpasswd:
+        path: "/home/azureuser/webserver/.creds"
+        name: test
+        password: Pep1t0$$
+
+    - name: 'Crear clave privada para certificado autofirmado'
+      community.crypto.openssl_privatekey:
+        path: /home/azureuser/webserver/localhost.key
+        type: RSA
+        size: 2048
+
+    - name: 'Generar peticion de firma (CSR) para CA certificate'
+      community.crypto.openssl_csr_pipe:
+        privatekey_path: /home/azureuser/webserver/localhost.key
+        common_name: vm_servicioweb
+        organization_name: DevOps
+        state_or_province_name: Madrid
+        country_name: ES
+        locality_name: Madrid
+        organizational_unit_name: Ejemplo
+        use_common_name_for_san: false
+        basic_constraints:
+          - 'CA:TRUE'
+        basic_constraints_critical: true
+        key_usage:
+          - keyCertSign
+        key_usage_critical: true
+      register: csr
+
+    - name: Generar un Self Signed CA certificate desde CSR.
+      community.crypto.x509_certificate:
+        path: /home/azureuser/webserver/localhost.pem
+        csr_content: "{{ csr.csr }}"
+        privatekey_path: /home/azureuser/webserver/localhost.key
+        provider: selfsigned
+
+    - name: Generate a Self Signed OpenSSL certificate
+      community.crypto.x509_certificate:
+        path: /home/azureuser/webserver/localhost.crt
+        privatekey_path: /home/azureuser/webserver/localhost.pem
+        csr_content: "{{ csr.csr }}"
+        provider: selfsigned
